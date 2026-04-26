@@ -1,7 +1,7 @@
 # Legrand RF Lighting for Home Assistant
 
 Home Assistant component for Legrand LC7001. This is work by 
-[rtyle](https://github.com/rtyle/home-assistant.core/tree/legrand_rflc/homeassistant/components/legrand_rflc) that I packaged for easier installation and tweaked
+[rtyle](    ) that I packaged for easier installation and tweaked
 to add devices corresponding to entitites.
 
 To use it, first add it to your `custom_components` directory,
