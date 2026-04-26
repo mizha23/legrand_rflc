@@ -57,7 +57,7 @@ async def async_setup_entry(
         model="LC7001",
     )
 
-    async def setup_platforms() -> None:
+    async def setup_platforms(*args) -> None:
         _LOGGER.warning("[legrand_rflc] Setting up platforms for entry: %s", entry.entry_id)
         _LOGGER.warning("[__init__] About to await async_forward_entry_setups for entry: %s", entry.entry_id)
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -80,7 +80,7 @@ async def async_setup_entry(
         )
         _LOGGER.warning("[__init__] Finished flow.async_init for entry: %s", entry_id)
 
-    async def reauth() -> None:
+    async def reauth(*args) -> None:
         _LOGGER.warning("[legrand_rflc] Unauthenticated event received, scheduling reauth for entry: %s", entry_id)
         _LOGGER.warning("[__init__] About to call hass.async_create_task(_reauth())")
         t1 = hass.async_create_task(_reauth())
