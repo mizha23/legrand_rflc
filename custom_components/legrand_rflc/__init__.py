@@ -59,11 +59,16 @@ async def async_setup_entry(
 
     async def setup_platforms() -> None:
         _LOGGER.warning("[legrand_rflc] Setting up platforms for entry: %s", entry.entry_id)
+        _LOGGER.warning("[__init__] About to await async_forward_entry_setups for entry: %s", entry.entry_id)
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        _LOGGER.warning("[__init__] Finished async_forward_entry_setups for entry: %s", entry.entry_id)
 
     async def _reauth() -> None:
         _LOGGER.warning("[legrand_rflc] Starting reauth flow for entry: %s", entry_id)
+        _LOGGER.warning("[__init__] About to await async_unload for entry: %s", entry_id)
         await hass.config_entries.async_unload(entry_id)
+        _LOGGER.warning("[__init__] Finished async_unload for entry: %s", entry_id)
+        _LOGGER.warning("[__init__] About to await flow.async_init for entry: %s", entry_id)
         await hass.config_entries.flow.async_init(
             DOMAIN,
             context={
@@ -73,14 +78,19 @@ async def async_setup_entry(
             },
             data=data,
         )
+        _LOGGER.warning("[__init__] Finished flow.async_init for entry: %s", entry_id)
 
     async def reauth() -> None:
         _LOGGER.warning("[legrand_rflc] Unauthenticated event received, scheduling reauth for entry: %s", entry_id)
-        hass.async_create_task(_reauth())
+        _LOGGER.warning("[__init__] About to call hass.async_create_task(_reauth())")
+        t1 = hass.async_create_task(_reauth())
+        _LOGGER.warning("[__init__] Created _reauth task: %s", t1)
 
     async def reload(message: Mapping) -> None:
         _LOGGER.warning("[legrand_rflc] Zone event received, scheduling reload for entry: %s", entry_id)
-        hass.async_create_task(hass.config_entries.async_reload(entry_id))
+        _LOGGER.warning("[__init__] About to call hass.async_create_task(async_reload)")
+        t2 = hass.async_create_task(hass.config_entries.async_reload(entry_id))
+        _LOGGER.warning("[__init__] Created reload task: %s", t2)
 
     hub.once(hub.EVENT_AUTHENTICATED, setup_platforms)
     hub.once(hub.EVENT_UNAUTHENTICATED, reauth)
@@ -88,7 +98,9 @@ async def async_setup_entry(
     hub.once(hub.EVENT_ZONE_DELETED, reload)
 
     _LOGGER.warning("[legrand_rflc] Starting hub loop for entry: %s", entry_id)
-    asyncio.create_task(hub.loop())  # not hass.async_create_task
+    _LOGGER.warning("[__init__] About to call asyncio.create_task(hub.loop())")
+    t3 = asyncio.create_task(hub.loop())  # not hass.async_create_task
+    _LOGGER.warning("[__init__] Created hub.loop task: %s", t3)
 
     return True
 
@@ -99,7 +111,11 @@ async def async_unload_entry(
     """Unload a config entry."""
     _LOGGER.warning("[legrand_rflc] Unloading config entry: %s", entry.entry_id)
     hub = hass.data[DOMAIN][entry.entry_id]
+    _LOGGER.warning("[__init__] About to await hub.cancel()")
     await hub.cancel()
+    _LOGGER.warning("[__init__] Finished hub.cancel()")
+    _LOGGER.warning("[__init__] About to await async_unload_platforms")
     await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    _LOGGER.warning("[__init__] Finished async_unload_platforms")
     hass.data[DOMAIN].pop(entry.entry_id)
     return True
