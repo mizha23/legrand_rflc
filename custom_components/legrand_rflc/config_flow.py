@@ -7,7 +7,7 @@ import logging
 import socket
 from typing import Any, Final
 
-import lc7001.aio
+from . import aio
 import voluptuous
 
 from homeassistant import config_entries, data_entry_flow
@@ -31,7 +31,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    HOST: Final = lc7001.aio.Connector.HOST
+    HOST: Final = aio.Connector.HOST
 
     ABORT_NO_DEVICES_FOUND: Final = "no_devices_found"
     ABORT_REAUTH_SUCCESSFUL: Final = "reauth_successful"
@@ -96,14 +96,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             key = None
             kwargs = {"key": key, "loop_timeout": -1}
             if CONF_PASSWORD in user_input:
-                key = kwargs["key"] = lc7001.aio.hash_password(
+                key = kwargs["key"] = aio.hash_password(
                     user_input[CONF_PASSWORD].encode()
                 )
             if CONF_PORT in user_input:  # for testing server emulation on localhost
                 kwargs["port"] = user_input[CONF_PORT]
             _LOGGER.warning("[config_flow] About to async_create_task for Connector loop for %s", host)
             task = self.hass.async_create_task(
-                lc7001.aio.Connector(host, **kwargs).loop()
+                aio.Connector(host, **kwargs).loop()
             )
             _LOGGER.warning("[config_flow] Created async task: %s", task)
             try:
@@ -113,7 +113,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except OSError as error:
                 _LOGGER.warning("OSError connecting to %s: %s", host, error)
                 errors[CONF_HOST] = self.ERROR_INVALID_HOST
-            except lc7001.aio.Authenticator.Error as error:
+            except aio.Authenticator.Error as error:
                 _LOGGER.warning("Authentication error for %s: %s", host, error)
                 errors[CONF_PASSWORD] = self.ERROR_INVALID_AUTH
             except Exception as error:
@@ -154,12 +154,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if CONF_PORT in user_input:  # for testing server emulation on localhost
                 kwargs["port"] = user_input[CONF_PORT]
             if CONF_PASSWORD in user_input:
-                key = kwargs["key"] = lc7001.aio.hash_password(
+                key = kwargs["key"] = aio.hash_password(
                     user_input[CONF_PASSWORD].encode()
                 )
             _LOGGER.warning("[config_flow] reauth: About to async_create_task for Connector loop for %s", host)
             task = self.hass.async_create_task(
-                lc7001.aio.Connector(host, **kwargs).loop()
+                aio.Connector(host, **kwargs).loop()
             )
             _LOGGER.warning("[config_flow] reauth: Created async task: %s", task)
             try:
@@ -169,7 +169,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except OSError as error:
                 _LOGGER.warning("OSError reconnecting to %s: %s", host, error)
                 errors[CONF_HOST] = self.ERROR_INVALID_HOST
-            except lc7001.aio.Authenticator.Error as error:
+            except aio.Authenticator.Error as error:
                 _LOGGER.warning("Authentication error reconnecting to %s: %s", host, error)
                 pass
             except Exception as error:

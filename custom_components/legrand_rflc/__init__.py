@@ -8,7 +8,7 @@ import logging
 from collections.abc import Mapping
 from typing import Final
 
-import lc7001.aio
+from . import aio
 
 from homeassistant import config_entries
 from homeassistant.config_entries import SOURCE_REAUTH
@@ -43,7 +43,7 @@ async def async_setup_entry(
         kwargs["key"] = bytes.fromhex(data[CONF_AUTHENTICATION])
     if CONF_PORT in data:  # for testing only (server emulation on localhost)
         kwargs["port"] = data[CONF_PORT]
-    hass.data[DOMAIN][entry_id] = hub = lc7001.aio.Hub(host, **kwargs)
+    hass.data[DOMAIN][entry_id] = hub = aio.Hub(host, **kwargs)
 
     # Register a device representing the hub.
     _LOGGER.warning("[legrand_rflc] Registering device for hub: %s", host)
