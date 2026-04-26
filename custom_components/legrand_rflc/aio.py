@@ -613,8 +613,9 @@ class Authenticator(Emitter):  # pylint: disable=too-few-public-methods
                 try:
                     message = json.loads(frame)
                     if message.get("Service") == "SystemInfo" and "MACAddress" in message:
-                        self._address = message["MACAddress"].replace(":", "").lower()
-                        raise self._Result()
+                        if not self._authenticated:
+                            self._address = message["MACAddress"].replace(":", "").lower()
+                            raise self._Result()
                 except (json.JSONDecodeError, AttributeError):
                     pass
             await super().unwrap(frame)
@@ -625,6 +626,7 @@ class Authenticator(Emitter):  # pylint: disable=too-few-public-methods
         return self._authenticated
 
     async def session(self):
+        self._authenticated = False
         try:
             # Force the controller to send SystemInfo if it's acting silent
             if self._writer is not None:
