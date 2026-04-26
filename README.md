@@ -16,3 +16,6 @@ local password for the LC7001.
 
 This integration does not use the cloud to control the LC7001, it 
 communicates locally.
+
+In this version, it integrates directly with LC7001 lib - aio.py without 
+depending on cloud to stabalize the integration.
