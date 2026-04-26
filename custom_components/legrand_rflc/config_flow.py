@@ -96,11 +96,18 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 lc7001.aio.Connector(host, **kwargs).loop()
             )
             try:
+                _LOGGER.warning("Starting async connection task for %s", host)
                 mac = await task
-            except OSError:
+                _LOGGER.warning("Finished async connection task for %s, mac: %s", host, mac)
+            except OSError as error:
+                _LOGGER.warning("OSError connecting to %s: %s", host, error)
                 errors[CONF_HOST] = self.ERROR_INVALID_HOST
-            except lc7001.aio.Authenticator.Error:
+            except lc7001.aio.Authenticator.Error as error:
+                _LOGGER.warning("Authentication error for %s: %s", host, error)
                 errors[CONF_PASSWORD] = self.ERROR_INVALID_AUTH
+            except Exception as error:
+                _LOGGER.warning("Unknown error connecting to %s: %s", host, error, exc_info=True)
+                errors["base"] = "unknown"
             else:
                 data = {CONF_HOST: host, CONF_MAC: mac}
                 if key is not None:
@@ -140,11 +147,18 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 lc7001.aio.Connector(host, **kwargs).loop()
             )
             try:
+                _LOGGER.warning("Starting async reconnection task for %s", host)
                 mac = await task
-            except OSError:
+                _LOGGER.warning("Finished async reconnection task for %s, mac: %s", host, mac)
+            except OSError as error:
+                _LOGGER.warning("OSError reconnecting to %s: %s", host, error)
                 errors[CONF_HOST] = self.ERROR_INVALID_HOST
-            except lc7001.aio.Authenticator.Error:
+            except lc7001.aio.Authenticator.Error as error:
+                _LOGGER.warning("Authentication error reconnecting to %s: %s", host, error)
                 pass
+            except Exception as error:
+                _LOGGER.warning("Unknown error reconnecting to %s: %s", host, error, exc_info=True)
+                errors["base"] = "unknown"
             else:
                 data = {CONF_HOST: host, CONF_MAC: mac}
                 if CONF_PORT in user_input:  # for testing server emulation on localhost

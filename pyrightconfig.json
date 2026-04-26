@@ -1,0 +1,6 @@
+{
+    "extraPaths": [
+        "C:\\Users\\final\\OneDrive\\Documents\\Projects\\Home Assistant\\core-dev"
+    ],
+    "reportMissingImports": "warning"
+}

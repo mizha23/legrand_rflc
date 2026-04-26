@@ -1,0 +1,12 @@
+{
+    "python.envFile": "${workspaceFolder}/.env",
+    "python.analysis.extraPaths": [
+        "C:\\Users\\final\\OneDrive\\Documents\\Projects\\Home Assistant\\core-dev"
+    ],
+    "python.autoComplete.extraPaths": [
+        "C:\\Users\\final\\OneDrive\\Documents\\Projects\\Home Assistant\\core-dev"
+    ],
+    "terminal.integrated.env.windows": {
+        "PYTHONPATH": "C:\\Users\\final\\OneDrive\\Documents\\Projects\\Home Assistant\\core-dev"
+    }
+}
