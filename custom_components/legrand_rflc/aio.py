@@ -770,4 +770,19 @@ class Hub(Connector):
 
     async def session(self):
         await Authenticator.session(self)
-        await Emitter.session(self)
+        
+        async def keepalive():
+            try:
+                while True:
+                    await asyncio.sleep(10)
+                    if self._writer is not None:
+                        _logger.debug("[aio] Sending keepalive ping...")
+                        await self.send({"Service": "ping"})
+            except asyncio.CancelledError:
+                pass
+                
+        keepalive_task = asyncio.create_task(keepalive())
+        try:
+            await Emitter.session(self)
+        finally:
+            keepalive_task.cancel()

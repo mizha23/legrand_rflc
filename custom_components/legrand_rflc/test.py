@@ -79,10 +79,10 @@ async def test_lc7001_connection(host, password=None):
         hub.on(hub.EVENT_LIST_ZONES, on_list_zones)
         hub.on(hub.EVENT_REPORT_ZONE_PROPERTIES, on_report_zone_properties)
         
-        print("Starting hub.loop(). Waiting 5 seconds to receive initial events...")
+        print("Starting hub.loop(). Waiting 25 seconds to receive initial events and test keepalive...")
         hub_task = asyncio.create_task(hub.loop())
         
-        await asyncio.sleep(5)
+        await asyncio.sleep(25)
         
         print("Test complete. Cancelling hub loop...")
         await hub.cancel()
