@@ -95,6 +95,17 @@ async def async_setup_entry(
         _LOGGER.warning("[legrand_rflc] Unauthenticated event received, scheduling reauth for entry: %s", entry_id)
         _LOGGER.warning("[__init__] About to call hass.async_create_task(_reauth())")
         t1 = hass.async_create_task(_reauth())
+
+        def _clear_reauth(task) -> None:
+            # If _reauth itself failed, the entry was NOT unloaded, so a
+            # later unauthenticated event must be allowed to retry it.
+            # If it succeeded, this old instance is discarded anyway.
+            try:
+                task.result()
+            except Exception:
+                _flow_flags["reauth"] = False
+
+        t1.add_done_callback(_clear_reauth)
         _LOGGER.warning("[__init__] Created _reauth task: %s", t1)
 
     async def reload(message: Mapping) -> None:
@@ -105,6 +116,14 @@ async def async_setup_entry(
         _LOGGER.warning("[legrand_rflc] Zone event received, scheduling reload for entry: %s", entry_id)
         _LOGGER.warning("[__init__] About to call hass.async_create_task(async_reload)")
         t2 = hass.async_create_task(hass.config_entries.async_reload(entry_id))
+
+        def _clear_reload(task) -> None:
+            try:
+                task.result()
+            except Exception:
+                _flow_flags["reload"] = False
+
+        t2.add_done_callback(_clear_reload)
         _LOGGER.warning("[__init__] Created reload task: %s", t2)
 
     # setup_platforms stays once(): platforms are only forwarded on the
@@ -129,8 +148,12 @@ async def async_setup_entry(
             _LOGGER.error("[legrand_rflc] Hub loop ended with error for entry %s: %s", entry_id, exc)
 
     _LOGGER.warning("[legrand_rflc] Starting hub loop for entry: %s", entry_id)
-    _LOGGER.warning("[__init__] About to call hass.async_create_task(hub.loop())")
-    t3 = hass.async_create_task(hub.loop())
+    _LOGGER.warning("[__init__] About to call entry.async_create_background_task(hub.loop())")
+    # Long-lived socket listener bound to this config entry: HA does not
+    # wait on it at startup and cancels it on unload. It still does NOT
+    # auto-restart a failed task; that is loop()'s own retry job, and
+    # _on_loop_done below is only for visibility.
+    t3 = entry.async_create_background_task(hass, hub.loop(), "legrand_rflc_hub_loop")
     t3.add_done_callback(_on_loop_done)
     _LOGGER.warning("[__init__] Created hub.loop task: %s", t3)
 
