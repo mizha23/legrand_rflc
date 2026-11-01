@@ -13,6 +13,7 @@ import collections
 import contextlib
 import json
 import logging
+import random
 import time
 from typing import Any, Final, Mapping, MutableMapping
 
@@ -503,6 +504,7 @@ class Authenticator(Emitter):  # pylint: disable=too-few-public-methods
         self._key: bytes = key
         self._address = None
         self._authenticated: bool = False
+        self._auth_generation = 0
 
     class Error(ValueError):
         """Authentication error."""
@@ -625,8 +627,43 @@ class Authenticator(Emitter):  # pylint: disable=too-few-public-methods
         """Return True if session successfully authenticated."""
         return self._authenticated
 
+    # How long to wait for the first SystemInfo/MAC (or Hello) frame before
+    # forcing a reconnect. Without this, a missed/split auth frame leaves
+    # the session receiving pings forever, authenticated stays False, and
+    # all lights stay unavailable with no retry (HA restart "fixed" it).
+    AUTH_TIMEOUT: Final = 30.0
+
+    async def _auth_watchdog(self, writer, generation):
+        """Close a stalled auth phase so Connector.loop() can retry it.
+
+        writer/generation are captured at session start: if this watchdog
+        somehow outlives its session, it must NOT close a newer connection's
+        writer. The check below has no await between check and close, so
+        in a single event loop it cannot interleave with auth succeeding.
+        """
+        await asyncio.sleep(self.AUTH_TIMEOUT)
+        if generation != self._auth_generation:
+            return
+        if writer is not self._writer:
+            return
+        if self._authenticated:
+            return
+        _logger.warning(
+            "[aio] Authentication timed out after %s s without "
+            "SystemInfo/MAC; forcing reconnect",
+            self.AUTH_TIMEOUT,
+        )
+        try:
+            writer.close()
+        except Exception:  # noqa: BLE001 - watchdog must not crash loop
+            pass
+
     async def session(self):
         self._authenticated = False
+        self._auth_generation += 1
+        watchdog = asyncio.create_task(
+            self._auth_watchdog(self._writer, self._auth_generation)
+        )
         try:
             # Force the controller to send SystemInfo if it's acting silent
             if self._writer is not None:
@@ -644,6 +681,8 @@ class Authenticator(Emitter):  # pylint: disable=too-few-public-methods
             self._authenticated = False
             await self._emit(self.EVENT_UNAUTHENTICATED)
             raise root.__cause__ from None
+        finally:
+            watchdog.cancel()
 
 
 class _ConnectionContext(contextlib.AbstractAsyncContextManager):
@@ -696,18 +735,35 @@ class Connector(Authenticator):
         self._port = port
         self._loop_timeout = loop_timeout
         self._task = None
+        self._auth_failures = 0
 
     def host(self):
         return self._host
 
     async def cancel(self):
         """Cancel the task running loop()."""
-        if self._task is not None:
-            self._task.cancel()
+        task = self._task
+        if task is not None:
+            task.cancel()
             try:
-                await self._task
+                await task
             except asyncio.CancelledError:
-                pass
+                # Awaiting a cancelled task raises CancelledError in the
+                # caller too. Swallow it ONLY when the caller itself is not
+                # being cancelled; if unload is itself being cancelled,
+                # propagate so HA's cancellation is not hidden.
+                current = asyncio.current_task()
+                cancelling = getattr(current, "cancelling", None)
+                if callable(cancelling) and cancelling():
+                    raise
+            except Exception:
+                # Task may already have finished with an auth/connection
+                # error; that error is logged by the loop itself, and
+                # unload must not fail because of it.
+                _logger.warning("[aio] Hub task ended with error during cancel")
+            finally:
+                if self._task is task:
+                    self._task = None
 
     @property
     def connected(self):
@@ -747,6 +803,52 @@ class Connector(Authenticator):
                             _logger.warning("OSError in session %s", error)
                         except asyncio.TimeoutError:
                             _logger.warning("asyncio.TimeoutError in session")
+                        except self.Error as error:
+                            # Authenticator.Error is a ValueError, NOT an
+                            # OSError/EOFError/TimeoutError, so before this
+                            # fix it escaped loop(), killed the hub task,
+                            # and every light stayed unavailable until a
+                            # manual HA restart/reload. Retry with backoff
+                            # instead; a bad key still triggers reauth via
+                            # EVENT_UNAUTHENTICATED, which unloads the entry
+                            # and cancels this loop.
+                            # Backoff resets only after a STABLE auth: if
+                            # the last auth succeeded >=60 s ago, this is a
+                            # new episode; if it failed within 60 s, keep
+                            # counting so a flapping controller cannot
+                            # reset to 2 s on every flap.
+                            auth_time = getattr(self, "_auth_success_time", None)
+                            if auth_time is not None and (
+                                time.monotonic() - auth_time >= 60
+                            ):
+                                self._auth_failures = 0
+                            self._auth_failures += 1
+                            delay = min(2 ** self._auth_failures, 60)
+                            delay *= random.uniform(0.9, 1.1)
+                            _logger.warning(
+                                "Authenticator.Error in session (%s); "
+                                "retrying in %.1f s (failure %s)",
+                                error,
+                                delay,
+                                self._auth_failures,
+                            )
+                            await asyncio.sleep(delay)
+                        except Exception as error:
+                            # Fault boundary: any other unexpected error
+                            # (frame parsing, handler bug, etc.) must not
+                            # kill the hub task either. CancelledError is
+                            # a BaseException, not Exception, so a real
+                            # HA unload cancellation still propagates.
+                            self._auth_failures += 1
+                            delay = min(2 ** self._auth_failures, 60)
+                            delay *= random.uniform(0.9, 1.1)
+                            _logger.exception(
+                                "Unexpected error in session (%s); "
+                                "retrying in %.1f s",
+                                error,
+                                delay,
+                            )
+                            await asyncio.sleep(delay)
                         finally:
                             _logger.debug("[aio] Clearing reader/writer and emitting EVENT_DISCONNECTED")
                             self._reader, self._writer = None, None
@@ -772,7 +874,11 @@ class Hub(Connector):
 
     async def session(self):
         await Authenticator.session(self)
-        
+        # Auth succeeded; record when, so the backoff reset in loop()
+        # can tell a stable connection (>=60 s) from a flapping one.
+        # Do NOT reset _auth_failures here (see loop()).
+        self._auth_success_time = time.monotonic()
+
         async def keepalive():
             try:
                 while True:
